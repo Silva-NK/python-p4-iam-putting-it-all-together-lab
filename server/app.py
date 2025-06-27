@@ -8,10 +8,70 @@ from config import app, db, api
 from models import User, Recipe
 
 class Signup(Resource):
-    pass
+    def post(self):
+        data = request.get_json()
+
+        username = data.get('username')
+        password = data.get('password')
+        image_url = data.get('image_url')
+        bio = data.get('bio')
+
+        errors = []
+        if not username:
+            errors.append("Username is required.")
+        if not password:
+            errors.append("Password is required.")
+
+        if errors:
+            return {'errors': errors}, 422
+        
+        try:
+            new_user = User(
+                username=username,
+                image_url=image_url,
+                bio=bio
+            )
+            new_user.password_hash = password
+
+            db.session.add(new_user)
+            db.session.commit()
+
+            session['user_id'] = new_user.id
+
+            return {
+                'id': new_user.id,
+                'username': new_user.username,
+                'image_url': new_user.image_url,
+                'bio': new_user.bio
+            }, 201
+        
+        except IntegrityError:
+            db.session.rollback()
+            return {'errors': ['Username must be unique.']}, 422
+        
+        except Exception as e:
+            db.session.rollback()
+            return {'errors': [str(e)]}, 422
+
 
 class CheckSession(Resource):
-    pass
+    def get(self):
+        user_id = session.get('user_id')
+
+        if user_id:
+            user = db.session.get(User, user_id)
+            if user:
+                return {
+                    'id': user.id,
+                    'username': user.username,
+                    'image_url': user.image_url,
+                    'bio': user.bio
+                }, 200
+            else:
+                return {'error': 'User not found'}, 401
+            
+        else:
+            return {'error': 'Unauthorized'}, 401
 
 class Login(Resource):
     pass
