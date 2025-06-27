@@ -74,13 +74,117 @@ class CheckSession(Resource):
             return {'error': 'Unauthorized'}, 401
 
 class Login(Resource):
-    pass
+    def post(self):
+        data = request.get_json()
+
+        username = data.get('username')
+        password = data.get('password')
+
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.authenticate(password):
+            session['user_id'] = user.id
+
+            return {
+                'id': user.id,
+                'username': user.username,
+                'image_url': user.image_url,
+                'bio': user.bio
+            }, 200
+        
+        else:
+            return {'error': 'Invalid username or password'}, 401
 
 class Logout(Resource):
-    pass
+    def delete(self):
+        user_id = session.get('user_id')
+
+        if user_id:
+            session.pop('user_id')
+            return '', 204
+        else:
+            return {'error': 'Unauthorized'}, 401
 
 class RecipeIndex(Resource):
-    pass
+    def get(self):
+        user_id = session.get('user_id')
+
+        if user_id:
+            recipes = Recipe.query.all()
+            recipes_list = []
+
+            for recipe in recipes:
+                recipes_list.append({
+                    'id': recipe.id,
+                    'title': recipe.title,
+                    'instructions': recipe.instructions,
+                    'minutes_to_complete': recipe.minutes_to_complete,
+                    'user': {
+                        'id': recipe.user.id,
+                        'username': recipe.user.username,
+                        'image_url': recipe.user.image_url,
+                        'bio': recipe.user.bio
+                    }
+                })
+
+            return recipes_list, 200
+        
+        else:
+            return {'error': 'Unauthorized'}, 401
+        
+    def post(self):
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return {'error': 'Unauthorized'}, 401
+        
+        data = request.get_json()
+        title = data.get('title')
+        instructions = data.get('instructions')
+        minutes_to_complete = data.get('minutes_to_complete')
+
+        errors = []
+        if not title:
+            errors.append("Title is required.")
+        if not instructions:
+            errors.append("Instructions are required.")
+        if not minutes_to_complete:
+            errors.append("Minutes to complete is required.")
+
+        if errors:
+            return {'errors': errors}, 422
+        
+        try:
+            new_recipe = Recipe(
+                title=title,
+                instructions=instructions,
+                minutes_to_complete=minutes_to_complete,
+                user_id=user_id
+            )
+
+            db.session.add(new_recipe)
+            db.session.commit()
+
+            user = db.session.get(User, user_id)
+
+            return {
+                'id': new_recipe.id,
+                'title': new_recipe.title,
+                'instructions': new_recipe.instructions,
+                'minutes_to_complete': new_recipe.minutes_to_complete,
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'image_url': user.image_url,
+                    'bio': user.bio
+                }
+            }, 201
+        
+        except Exception as e:
+            db.session.rollback()
+            return {'errors': [str(e)]}, 422
+
+
 
 api.add_resource(Signup, '/signup', endpoint='signup')
 api.add_resource(CheckSession, '/check_session', endpoint='check_session')
